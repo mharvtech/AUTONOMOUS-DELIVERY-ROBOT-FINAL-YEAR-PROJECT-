@@ -1,0 +1,17 @@
+menu "Delivery Robot WiFi Configuration"
+
+config WIFI_SSID
+    string "WiFi SSID to join"
+    default ""
+    help
+        The network the robot joins as a station. Leave blank to run on the
+        robot's own access point only (SSID "marvel-robot" - see ROBOT_AP_SSID
+        in components/web_server/web_server.c).
+
+config WIFI_PASSWORD
+    string "WiFi password"
+    default ""
+    help
+        WPA2 password for the network above.
+
+endmenu

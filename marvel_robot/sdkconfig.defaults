@@ -1,0 +1,21 @@
+# A 1ms FreeRTOS tick. The default is 100Hz (10ms), which makes
+# pdMS_TO_TICKS(5) evaluate to zero ticks - and vTaskDelay(0) does not block,
+# so the control loop spins, the idle task on CPU0 never runs, and the task
+# watchdog trips a few seconds after boot. main.c clamps the delay to one tick
+# so it can never hang even without this, but at 100Hz the steering loop runs
+# at 10ms instead of 5ms.
+CONFIG_FREERTOS_HZ=1000
+
+# The control loop briefly busy-waits on the HC-SR04 echo pin, so give the
+# watchdog a little more room than the 5s default before it complains.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+
+# app_main carries the control loop plus the calibration paths.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+
+# Motors and the WiFi radio share the supply; a current spike on a marginal
+# battery reads as a brownout reset that looks exactly like a firmware hang.
+# Keep the detector on, but at a lower trip point so ordinary motor inrush
+# does not reset the board.
+CONFIG_ESP_BROWNOUT_DET=y
+CONFIG_ESP_BROWNOUT_DET_LVL_SEL_4=y

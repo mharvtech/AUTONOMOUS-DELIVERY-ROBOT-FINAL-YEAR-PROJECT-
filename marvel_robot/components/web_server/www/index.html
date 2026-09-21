@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Marvel Delivery Robot - Control Terminal</title>
+<!--
+  No web fonts, no CDN links. The robot serves this page over its own access
+  point, where there is usually no route to the internet: an external
+  stylesheet would block rendering until it timed out. System fonts and inline
+  CSS/JS only.
+-->
+<style>
+  :root{
+    --bg:#0A0F1C; --surface:#121A2C; --surface-2:#182238; --surface-3:#1E2A45;
+    --border:#263252; --border-soft:#1c2740;
+    --text:#EAF0FB; --text-dim:#8CA0C4; --text-faint:#5B6C8E;
+    --accent:#2FE0C5; --accent-dim:rgba(47,224,197,.14);
+    --accent2:#5B8CFF; --accent2-dim:rgba(91,140,255,.14);
+    --danger:#FF5470; --danger-dim:rgba(255,84,112,.14);
+    --warn:#FFB454;
+    --mark-red:#FF4D5E; --mark-green:#31E08A; --mark-blue:#4D8CFF;
+    --font-body:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(47,224,197,.07), transparent 60%), var(--bg);
+    color:var(--text); font-family:var(--font-body); min-height:100vh;
+    -webkit-text-size-adjust:100%;
+  }
+  button{font-family:inherit;cursor:pointer;}
+  input{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .app{max-width:1180px;margin:0 auto;padding:18px 18px 40px;}
+
+  /* Topbar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    flex-wrap:wrap;padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--border-soft);}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{width:38px;height:38px;border-radius:10px;flex-shrink:0;
+    background:linear-gradient(145deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;}
+  .brand-mark svg{width:20px;height:20px;}
+  .brand h1{font-weight:650;font-size:18px;letter-spacing:.2px;margin:0;line-height:1.15;}
+  .brand .subtitle{font-family:var(--font-mono);font-size:11px;color:var(--text-faint);
+    letter-spacing:.06em;text-transform:uppercase;}
+  .connection{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .ip-input{background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    border-radius:9px;padding:9px 12px;font-family:var(--font-mono);font-size:13px;width:150px;}
+  .ip-input::placeholder{color:var(--text-faint);}
+  .connect-btn{display:flex;align-items:center;gap:8px;background:var(--accent-dim);
+    border:1px solid rgba(47,224,197,.35);color:var(--accent);border-radius:9px;
+    padding:9px 14px;font-size:13px;font-weight:600;}
+  .connect-btn:hover{background:rgba(47,224,197,.22);}
+  .connect-btn.connected{background:var(--danger-dim);border-color:rgba(255,84,112,.35);color:var(--danger);}
+  .connect-btn svg{width:15px;height:15px;}
+  .status-pill{display:flex;align-items:center;gap:9px;background:var(--surface-2);
+    border:1px solid var(--border);border-radius:9px;padding:8px 14px;}
+  .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0;}
+  .status-pill.live .pulse-dot{background:var(--accent);animation:pulse-ring 1.8s ease-out infinite;}
+  @keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(47,224,197,.55);}
+    70%{box-shadow:0 0 0 8px rgba(47,224,197,0);}100%{box-shadow:0 0 0 0 rgba(47,224,197,0);}}
+  .status-pill .label{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);}
+  .status-pill.live .label{color:var(--text);}
+
+  .layout{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start;}
+  @media (max-width:900px){.layout{grid-template-columns:1fr;}}
+  .stack{display:flex;flex-direction:column;gap:18px;}
+  .card{background:var(--surface);border:1px solid var(--border-soft);
+    border-radius:var(--radius);padding:20px;}
+  h2{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--text-dim);margin:0 0 14px;}
+
+  /* Mode toggle */
+  .mode-toggle{position:relative;display:grid;grid-template-columns:1fr 1fr;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:11px;
+    padding:4px;margin-bottom:20px;}
+  .mode-indicator{position:absolute;top:4px;left:4px;bottom:4px;width:calc(50% - 4px);
+    background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;
+    transition:transform .28s cubic-bezier(.65,0,.35,1);z-index:0;}
+  .mode-toggle[data-active="manual"] .mode-indicator{transform:translateX(100%);}
+  .mode-btn{position:relative;z-index:1;background:none;border:none;padding:11px 0;
+    font-weight:600;font-size:14px;color:var(--text-dim);border-radius:8px;transition:color .2s;}
+  .mode-btn.active{color:#06141C;}
+  .panel{display:none;} .panel.active{display:block;}
+
+  /* Autonomous */
+  .color-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+  .color-swatch{--c:#888;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:10px;padding:14px 6px 11px;display:flex;flex-direction:column;
+    align-items:center;gap:9px;color:var(--text-dim);font-size:12.5px;font-weight:500;
+    transition:all .15s;}
+  .color-swatch::before{content:"";width:22px;height:22px;border-radius:50%;
+    background:var(--c);box-shadow:0 0 0 0 transparent;transition:box-shadow .15s;}
+  .color-swatch:hover{border-color:var(--c);color:var(--text);}
+  .color-swatch.selected{border-color:var(--c);color:var(--text);background:var(--surface-3);}
+  .color-swatch.selected::before{box-shadow:0 0 0 4px rgba(255,255,255,.14);}
+  .actions{display:flex;gap:10px;margin-bottom:16px;}
+  .primary-btn,.secondary-btn{flex:1;padding:13px;border-radius:10px;font-weight:600;
+    font-size:14px;border:1px solid transparent;transition:all .15s;}
+  .primary-btn{background:var(--accent);color:#06141C;}
+  .primary-btn:hover:not(:disabled){filter:brightness(1.08);}
+  .primary-btn:disabled,.secondary-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .secondary-btn{background:var(--surface-2);border-color:var(--border);color:var(--text-dim);}
+  .secondary-btn:hover:not(:disabled){border-color:var(--danger);color:var(--danger);}
+
+  .readout{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;
+    padding:14px 16px;display:flex;flex-direction:column;gap:9px;}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .row .label{font-size:11.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
+  .row .value{font-family:var(--font-mono);font-size:13px;color:var(--text);text-align:right;}
+  .row .value.accent{color:var(--accent);}
+
+  /* Line position indicator */
+  .track{position:relative;height:26px;background:var(--surface-3);border:1px solid var(--border);
+    border-radius:8px;overflow:hidden;}
+  .track .centre{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;
+    background:var(--border);}
+  .track .marker{position:absolute;top:5px;bottom:5px;width:14px;border-radius:4px;
+    background:var(--accent);left:calc(50% - 7px);transition:left .12s,background .12s;}
+  .track .marker.off{background:var(--warn);}
+  .track .side{position:absolute;top:0;bottom:0;width:33%;opacity:0;transition:opacity .12s;}
+  .track .side.l{left:0;background:linear-gradient(90deg,rgba(255,180,84,.35),transparent);}
+  .track .side.r{right:0;background:linear-gradient(270deg,rgba(255,180,84,.35),transparent);}
+  .track .side.on{opacity:1;}
+
+  /* Manual */
+  .dpad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,62px);
+    gap:8px;margin-bottom:18px;max-width:320px;}
+  .dpad-btn{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
+    display:flex;align-items:center;justify-content:center;color:var(--text-dim);
+    transition:all .1s;user-select:none;-webkit-user-select:none;touch-action:manipulation;}
+  .dpad-btn svg{width:22px;height:22px;}
+  .dpad-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .dpad-btn:not(:disabled):hover{color:var(--text);border-color:var(--accent2);}
+  .dpad-btn:not(:disabled):active{transform:scale(.96);}
+  /* Latched: this direction is still driving the motors. A held state, not a
+     momentary press, so it stays full size with a solid border. */
+  .dpad-btn.latched{background:var(--accent2-dim);border-color:var(--accent2);
+    color:var(--accent2);box-shadow:inset 0 0 0 1px var(--accent2);}
+  .dpad-btn.latched:active{transform:none;}
+  .dpad-btn.stop{grid-column:2;grid-row:2;color:var(--danger);}
+  .dpad-btn.stop:not(:disabled):hover{border-color:var(--danger);}
+  .dpad-btn.fwd{grid-column:2;grid-row:1;} .dpad-btn.left{grid-column:1;grid-row:2;}
+  .dpad-btn.right{grid-column:3;grid-row:2;} .dpad-btn.back{grid-column:2;grid-row:3;}
+  .dpad-btn.ccw{grid-column:1;grid-row:1;} .dpad-btn.cw{grid-column:3;grid-row:1;}
+  .dpad-btn.ccw svg,.dpad-btn.cw svg{width:18px;height:18px;}
+  .pwm-control{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:16px;}
+  .pwm-control label{display:flex;justify-content:space-between;font-size:11.5px;
+    color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+  #pwmValue{font-family:var(--font-mono);color:var(--accent2);font-size:13px;}
+  input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;
+    background:linear-gradient(90deg,var(--accent2) var(--pct,63%), var(--border) var(--pct,63%));}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;
+    border-radius:50%;background:var(--accent2);border:3px solid var(--bg);box-shadow:0 0 0 1px var(--accent2);}
+  input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:var(--accent2);border:3px solid var(--bg);}
+
+  .estop-btn{width:100%;margin-top:18px;padding:15px;border-radius:12px;
+    background:var(--danger-dim);border:1px solid rgba(255,84,112,.4);color:var(--danger);
+    font-weight:700;font-size:14px;letter-spacing:.06em;transition:all .12s;}
+  .estop-btn:hover{background:var(--danger);color:#180008;}
+
+  /* Telemetry */
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:12.5px;}
+  .chip .dot{width:11px;height:11px;border-radius:50%;background:#33405e;border:1px solid var(--border);}
+  .chip[data-color="red"] .dot{background:var(--mark-red);border-color:var(--mark-red);}
+  .chip[data-color="green"] .dot{background:var(--mark-green);border-color:var(--mark-green);}
+  .chip[data-color="blue"] .dot{background:var(--mark-blue);border-color:var(--mark-blue);}
+  .led{display:inline-block;width:11px;height:11px;border-radius:3px;background:#2a3552;
+    border:1px solid var(--border);margin-left:6px;vertical-align:middle;}
+  .led.on{background:var(--warn);border-color:var(--warn);}
+  .raw{font-family:var(--font-mono);font-size:11.5px;color:var(--text-faint);}
+  .bar{height:5px;border-radius:3px;background:var(--surface-3);overflow:hidden;width:96px;}
+  .bar span{display:block;height:100%;background:var(--accent);width:0%;transition:width .2s;}
+  .chip[data-color="black"] .dot{background:#05070c;border-color:#3a4970;}
+
+  /* Calibration */
+  .cal-note{font-size:12px;color:var(--text-faint);line-height:1.55;margin:0 0 14px;}
+  .cal-btn{width:100%;background:var(--surface-2);border:1px solid var(--border);
+    color:var(--text-dim);border-radius:9px;padding:11px 10px;font-size:12.5px;
+    font-weight:500;transition:all .15s;margin-bottom:8px;text-align:left;}
+  .cal-btn b{display:block;color:var(--text);font-weight:600;font-size:13px;margin-bottom:2px;}
+  .cal-btn:not(:disabled):hover{border-color:var(--accent);}
+  .cal-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .cal-btn.danger:not(:disabled):hover{border-color:var(--danger);}
+  .cal-result{font-family:var(--font-mono);font-size:11.5px;color:var(--text-faint);
+    min-height:16px;margin-top:6px;line-height:1.5;}
+  .cal-result.ok{color:var(--accent);} .cal-result.bad{color:var(--danger);}
+
+  /* Log */
+  .log-panel{display:flex;flex-direction:column;max-height:360px;}
+  .log-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .log-header h2{margin:0;}
+  .clear-btn{background:none;border:1px solid var(--border);color:var(--text-faint);
+    border-radius:7px;padding:5px 10px;font-size:11px;}
+  .clear-btn:hover{color:var(--text);border-color:var(--text-dim);}
+  .log-list{overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:4px;flex:1;min-height:100px;}
+  .log-entry{display:flex;gap:9px;padding:8px 10px;border-radius:8px;
+    background:var(--surface-2);border:1px solid var(--border-soft);}
+  .log-dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex-shrink:0;background:var(--accent2);}
+  .log-entry.success .log-dot{background:var(--accent);}
+  .log-entry.warn .log-dot{background:var(--warn);}
+  .log-entry.error .log-dot{background:var(--danger);}
+  .log-body{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .log-msg{font-size:12.5px;line-height:1.4;word-break:break-word;}
+  .log-time{font-family:var(--font-mono);font-size:10.5px;color:var(--text-faint);}
+  .log-empty{color:var(--text-faint);font-size:12.5px;text-align:center;padding:24px 10px;}
+
+  @media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important;}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h10M9 3v4.2a2 2 0 0 1-.5 1.32L5.8 12.4A4 4 0 0 0 8.85 19h6.3a4 4 0 0 0 3.05-6.6l-2.7-3.88A2 2 0 0 1 15 7.2V3" stroke="#06141C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 14.5h9" stroke="#06141C" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <h1>Basic Medical Delivery Robot</h1>
+        <div class="subtitle">Field Control Terminal</div>
+      </div>
+    </div>
+    <div class="connection">
+      <input id="robotIp" class="ip-input" type="text" placeholder="marvel.local" autocomplete="off" />
+      <button id="connectBtn" class="connect-btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V3M15 7V3M9 21v-4M15 21v-4M6 7h12v4a6 6 0 0 1-12 0V7Z"/></svg>
+        <span id="connectLabel">Connect</span>
+      </button>
+      <div class="status-pill" id="statusPill">
+        <div class="pulse-dot"></div><span class="label" id="statusLabel">Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="stack">
+      <section class="card">
+        <div class="mode-toggle" id="modeToggle" data-active="autonomous">
+          <div class="mode-indicator"></div>
+          <button class="mode-btn active" data-mode="autonomous" type="button">Autonomous</button>
+          <button class="mode-btn" data-mode="manual" type="button">Manual</button>
+        </div>
+
+        <div class="panel active" id="autonomousPanel">
+          <h2>Destination colour</h2>
+          <div class="color-grid">
+            <button class="color-swatch" data-color="red" style="--c:#FF4D5E" type="button">Red</button>
+            <button class="color-swatch" data-color="green" style="--c:#31E08A" type="button">Green</button>
+            <button class="color-swatch" data-color="blue" style="--c:#4D8CFF" type="button">Blue</button>
+          </div>
+          <div class="actions">
+            <button id="startAuto" class="primary-btn" type="button" disabled>Start mission</button>
+            <button id="stopAuto" class="secondary-btn" type="button" disabled>Stop</button>
+          </div>
+          <div class="readout">
+            <div class="row"><span class="label">Behaviour</span><span class="value accent" id="autoState">--</span></div>
+            <div class="row"><span class="label">Target</span><span class="value" id="autoTarget">none</span></div>
+            <div class="row"><span class="label">Steering</span><span class="value" id="lineWord">--</span></div>
+            <div class="track" id="track">
+              <div class="side l" id="sideL"></div>
+              <div class="side r" id="sideR"></div>
+              <div class="centre"></div>
+              <div class="marker" id="lineMarker"></div>
+            </div>
+            <div class="row"><span class="label">On black for</span><span class="value" id="blackMs">0 ms</span></div>
+          </div>
+        </div>
+
+        <div class="panel" id="manualPanel">
+          <h2>Navigation</h2>
+          <div class="dpad">
+            <button class="dpad-btn ccw" data-dir="spin_ccw" title="Spin left" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-6h6"/></svg>
+            </button>
+            <button class="dpad-btn fwd" data-dir="forward" title="Forward" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+            <button class="dpad-btn cw" data-dir="spin_cw" title="Spin right" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 0-3 6.7"/><path d="M21 21v-6h-6"/></svg>
+            </button>
+            <button class="dpad-btn left" data-dir="left" title="Left" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            </button>
+            <button class="dpad-btn stop" data-dir="stop" title="Stop" type="button">
+              <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
+            <button class="dpad-btn right" data-dir="right" title="Right" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <button class="dpad-btn back" data-dir="backward" title="Backward" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+            </button>
+          </div>
+          <div class="pwm-control">
+            <label>PWM speed <span id="pwmValue">160</span></label>
+            <input type="range" id="pwmSlider" min="0" max="255" value="160" />
+          </div>
+        </div>
+
+        <button id="estop" class="estop-btn" type="button">EMERGENCY STOP</button>
+      </section>
+
+      <section class="card">
+        <h2>Calibration</h2>
+        <p class="cal-note">
+          Both of these are saved to flash, so the robot only has to be taught once.
+          The wheels stop before each sample, so it is safe to press at any time.
+        </p>
+        <button class="cal-btn" data-cal="ir_floor" type="button" disabled>
+          <b>1. Learn IR polarity</b>
+          Centre the robot on the tape so BOTH IR sensors sit on bare floor.
+          Whatever they read then is "floor" - this is how the robot works out
+          whether your modules go high or low over black.
+        </button>
+        <button class="cal-btn" data-cal="white" type="button" disabled>
+          <b>2. Learn white balance</b>
+          Hold a sheet of white paper in front of the colour sensor. Without this
+          its green channel dominates and blue room markers get missed.
+        </button>
+        <button class="cal-btn danger" data-cal="forget" type="button" disabled>
+          <b>Forget stored calibration</b>
+          Wipes both of the above and reverts to the compiled defaults on next boot.
+        </button>
+        <div class="cal-result" id="calResult"></div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <h2>Live sensors</h2>
+        <div class="readout" style="gap:11px">
+          <div class="row">
+            <span class="label">Front colour</span>
+            <span class="chip" id="frontChip" data-color="none"><span class="dot"></span><span id="frontColor">none</span></span>
+          </div>
+          <div class="row"><span class="label">Front raw</span><span class="raw" id="frontRaw">--</span></div>
+          <div class="row">
+            <span class="label">IR left / right</span>
+            <span class="value"><span class="led" id="irLeft"></span><span class="led" id="irRight"></span></span>
+          </div>
+          <div class="row"><span class="label">IR pin levels</span><span class="raw" id="irLevels">--</span></div>
+          <div class="row"><span class="label">Obstacle</span><span class="value" id="distance">--</span></div>
+          <div class="row"><span class="label">Wheels L / R</span><span class="value" id="speeds">0 / 0</span></div>
+        </div>
+      </section>
+
+      <section class="card log-panel">
+        <div class="log-header">
+          <h2>Transmission log</h2>
+          <button class="clear-btn" id="clearLog" type="button">Clear</button>
+        </div>
+        <div class="log-list" id="logList">
+          <div class="log-empty" id="logEmpty">No activity yet.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  ============================================================
+  Robot REST API served by esp_http_server. Base URL = http://<robotIp>
+
+  GET  /api/info    -> { hostname, ip, station_connected, ap_ssid }
+  GET  /api/status  -> { connected, mode, state, distance_cm, target,
+                         mission_running, arrived,
+                         front: {valid,color,r,g,b,c},
+                         ir:    {left,right,left_level,right_level,line_level},
+                         line:  {error,correction,base_speed},
+                         speed: {left,right},
+                         calibration: {ok,message,wb_r,wb_g,wb_b} }
+  GET  /api/sensors -> raw sensor view
+  POST /api/mode             { mode: "autonomous" | "manual" }
+  POST /api/autonomous/start { target_color: "red"|"green"|"blue" }
+  POST /api/autonomous/stop
+  POST /api/manual/move      { direction: "forward"|"backward"|"left"|"right"
+                                 |"spin_cw"|"spin_ccw"|"stop", pwm: 0-255 }
+  POST /api/calibrate        { target: "ir_floor"|"white"|"forget" }
+  POST /api/estop
+  ============================================================
+*/
+
+const state = {
+  connected: false, baseUrl: '', mode: 'autonomous',
+  targetColor: null, pollTimer: null, lastCalMessage: '',
+};
+
+const el = (id) => document.getElementById(id);
+const logList = el('logList');
+
+function logEvent(message, type) {
+  const empty = el('logEmpty');
+  if (empty) empty.remove();
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + (type || 'info');
+  const dot = document.createElement('div');
+  dot.className = 'log-dot';
+  const body = document.createElement('div');
+  body.className = 'log-body';
+  const msg = document.createElement('span');
+  msg.className = 'log-msg';
+  msg.textContent = message;
+  const stamp = document.createElement('span');
+  stamp.className = 'log-time';
+  stamp.textContent = new Date().toLocaleTimeString([], { hour12: false });
+  body.appendChild(msg); body.appendChild(stamp);
+  entry.appendChild(dot); entry.appendChild(body);
+
+  logList.prepend(entry);
+  const entries = logList.querySelectorAll('.log-entry');
+  if (entries.length > 80) entries[entries.length - 1].remove();
+}
+
+el('clearLog').addEventListener('click', () => {
+  logList.innerHTML = '';
+  const fresh = document.createElement('div');
+  fresh.className = 'log-empty';
+  fresh.id = 'logEmpty';
+  fresh.textContent = 'No activity yet.';
+  logList.appendChild(fresh);
+});
+
+async function apiCall(path, body) {
+  if (!state.connected) {
+    logEvent('Not connected - command ignored.', 'error');
+    return null;
+  }
+  try {
+    const res = await fetch(state.baseUrl + path, {
+      method: body ? 'POST' : 'GET',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json().catch(() => ({}));
+  } catch (err) {
+    logEvent('Request failed: ' + path + ' (' + err.message + ')', 'error');
+    return null;
+  }
+}
+
+function setConnected(isConnected) {
+  state.connected = isConnected;
+  el('connectBtn').classList.toggle('connected', isConnected);
+  el('connectLabel').textContent = isConnected ? 'Disconnect' : 'Connect';
+  el('statusPill').classList.toggle('live', isConnected);
+  el('statusLabel').textContent = isConnected ? 'Connected' : 'Disconnected';
+
+  document.querySelectorAll('.dpad-btn[data-dir]').forEach((b) => {
+    if (b.dataset.dir !== 'stop') b.disabled = !isConnected;
+  });
+  document.querySelectorAll('.cal-btn').forEach((b) => { b.disabled = !isConnected; });
+  el('startAuto').disabled = !isConnected || !state.targetColor;
+  el('stopAuto').disabled = !isConnected;
+}
+
+function rawText(s) {
+  if (!s || !s.valid) return 'sensor offline';
+  return 'R' + s.r + ' G' + s.g + ' B' + s.b + ' C' + s.c;
+}
+
+function applyStatus(data) {
+  el('autoState').textContent = (data.state || '--').replace(/_/g, ' ');
+  el('autoTarget').textContent = data.target || 'none';
+
+  if (typeof data.distance_cm === 'number') {
+    // -1 means the ultrasonic has nothing valid in range, which is normal.
+    el('distance').textContent = data.distance_cm >= 0
+      ? data.distance_cm.toFixed(0) + ' cm' : 'no echo';
+  }
+
+  const known = ['red', 'green', 'blue', 'black'];
+  const front = data.front || {};
+  el('frontChip').dataset.color = known.indexOf(front.color) >= 0 ? front.color : 'none';
+  el('frontColor').textContent = front.color || 'none';
+  el('frontRaw').textContent = rawText(front);
+
+
+
+  const ir = data.ir || {};
+  el('irLeft').classList.toggle('on', !!ir.left);
+  el('irRight').classList.toggle('on', !!ir.right);
+  el('irLevels').textContent =
+    'L=' + (ir.left_level !== undefined ? ir.left_level : '?') +
+    ' R=' + (ir.right_level !== undefined ? ir.right_level : '?') +
+    '  (line = ' + (ir.line_level ? 'HIGH' : 'LOW') + ')';
+
+  // The robot is either driving straight or pivoting toward one side - there
+  // is no in-between, so this is a three-position indicator.
+  const line = data.line || {};
+  const dir = line.turn_dir || 0;
+  const marker = el('lineMarker');
+  marker.style.left = dir < 0 ? '12%' : (dir > 0 ? 'calc(88% - 14px)' : 'calc(50% - 7px)');
+  marker.classList.toggle('off', dir !== 0);
+  el('sideL').classList.toggle('on', dir < 0);
+  el('sideR').classList.toggle('on', dir > 0);
+  el('lineWord').textContent = dir < 0 ? 'correcting left'
+                             : (dir > 0 ? 'correcting right' : 'straight ahead');
+  el('blackMs').textContent = (line.black_ms || 0) + ' ms';
+
+  const sp = data.speed || {};
+  el('speeds').textContent = (sp.left || 0) + ' / ' + (sp.right || 0);
+
+  // The firmware keeps the last calibration result until the next one, so only
+  // surface it when it changes - otherwise every poll would log it again.
+  const cal = data.calibration || {};
+  if (cal.message && cal.message !== state.lastCalMessage) {
+    state.lastCalMessage = cal.message;
+    el('calResult').textContent = cal.message;
+    el('calResult').className = 'cal-result ' + (cal.ok ? 'ok' : 'bad');
+    logEvent(cal.message, cal.ok ? 'success' : 'error');
+  }
+
+  // The robot is the source of truth for the mode - it may have dropped out of
+  // a mission on its own (arrival, e-stop, link loss).
+  if (data.mode && data.mode !== state.mode) applyModeLocally(data.mode);
+}
+
+async function pollStatus() {
+  const data = await apiCall('/api/status');
+  if (data) applyStatus(data);
+}
+
+// The robot publishes itself over mDNS as marvel.local, so nothing has to be
+// typed in. A bare hostname or IP works too, for networks where mDNS is
+// blocked (some Android versions, AP-isolated guest WiFi).
+const DEFAULT_HOST = 'marvel.local';
+
+function normalizeHost(input) {
+  return input.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+}
+
+function connectTo(host, opts) {
+  const quiet = opts && opts.quiet;
+  // An empty host means the page was served by the robot itself, so every call
+  // goes to the same origin with no cross-origin request at all.
+  state.baseUrl = host ? 'http://' + host : '';
+  const label = host || window.location.host;
+  if (!quiet) logEvent('Connecting to ' + label + '...', 'info');
+
+  // A raw fetch, not apiCall - apiCall refuses to run until state.connected is
+  // true, so it can never perform the check that sets state.connected.
+  return fetch(state.baseUrl + '/api/status')
+    .then((res) => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then((data) => {
+      setConnected(true);
+      applyStatus(data);
+      logEvent('Connected to robot at ' + label + '.', 'success');
+      clearInterval(state.pollTimer);
+      state.pollTimer = setInterval(pollStatus, 500);
+      fetch(state.baseUrl + '/api/info').then((r) => r.json()).then((info) => {
+        if (info && (info.hostname || info.ip)) el('robotIp').value = info.hostname || info.ip;
+        if (info && info.station_connected === false) {
+          logEvent('Robot is on its own access point "' + info.ap_ssid + '".', 'warn');
+        }
+      }).catch(() => {});
+      return true;
+    })
+    .catch((err) => {
+      logEvent('Could not reach robot at ' + label + '. (' + err.message + ')', 'error');
+      return false;
+    });
+}
+
+el('connectBtn').addEventListener('click', () => {
+  if (state.connected) {
+    clearInterval(state.pollTimer);
+    stopLatch();
+    setConnected(false);
+    logEvent('Disconnected from robot.', 'warn');
+    return;
+  }
+  connectTo(normalizeHost(el('robotIp').value) || DEFAULT_HOST);
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.location.protocol.startsWith('http')) {
+    el('robotIp').value = window.location.host;
+    connectTo('', { quiet: true });
+  } else {
+    el('robotIp').value = DEFAULT_HOST;
+    connectTo(DEFAULT_HOST);
+  }
+});
+
+function applyModeLocally(mode) {
+  state.mode = mode;
+  el('modeToggle').dataset.active = mode;
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  el('autonomousPanel').classList.toggle('active', mode === 'autonomous');
+  el('manualPanel').classList.toggle('active', mode === 'manual');
+}
+
+document.querySelectorAll('.mode-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const mode = btn.dataset.mode;
+    if (mode === state.mode) return;
+    stopLatch();   // never leave manual with a direction still held
+    applyModeLocally(mode);
+    await apiCall('/api/mode', { mode: mode });
+    logEvent('Switched to ' + mode + ' mode.', 'info');
+  });
+});
+
+document.querySelectorAll('.color-swatch').forEach((swatch) => {
+  swatch.addEventListener('click', () => {
+    document.querySelectorAll('.color-swatch').forEach((s) => s.classList.remove('selected'));
+    swatch.classList.add('selected');
+    state.targetColor = swatch.dataset.color;
+    el('startAuto').disabled = !state.connected;
+  });
+});
+
+el('startAuto').addEventListener('click', async () => {
+  if (!state.targetColor) return;
+  const res = await apiCall('/api/autonomous/start', { target_color: state.targetColor });
+  if (res) logEvent('Mission started - hunting for ' + state.targetColor + '.', 'success');
+});
+
+el('stopAuto').addEventListener('click', async () => {
+  const res = await apiCall('/api/autonomous/stop');
+  if (res) logEvent('Mission stopped.', 'warn');
+});
+
+const pwmSlider = el('pwmSlider');
+function updatePwmTrack() {
+  pwmSlider.style.setProperty('--pct', (pwmSlider.value / pwmSlider.max) * 100 + '%');
+  el('pwmValue').textContent = pwmSlider.value;
+}
+pwmSlider.addEventListener('input', updatePwmTrack);
+updatePwmTrack();
+
+// Manual commands latch: tapping a direction leaves the motors running until a
+// different direction, Stop, or Emergency Stop is sent. The firmware keeps its
+// own link-loss timeout, so while a direction is latched the browser re-sends
+// it as a heartbeat. Without that, a dropped connection would leave the robot
+// driving with nothing able to stop it.
+const HEARTBEAT_MS = 400;
+let activeDir = null;
+let heartbeatTimer = null;
+
+function stopLatch() {
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+  activeDir = null;
+  document.querySelectorAll('.dpad-btn[data-dir]').forEach((b) => b.classList.remove('latched'));
+}
+
+function sendDirection(dir) {
+  return apiCall('/api/manual/move', { direction: dir, pwm: Number(pwmSlider.value) });
+}
+
+document.querySelectorAll('.dpad-btn[data-dir]').forEach((btn) => {
+  const dir = btn.dataset.dir;
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (btn.disabled) return;
+
+    if (dir === 'stop') {
+      stopLatch();
+      await sendDirection('stop');
+      logEvent('Manual: stop', 'warn');
+      return;
+    }
+
+    stopLatch();
+    activeDir = dir;
+    btn.classList.add('latched');
+    await sendDirection(dir);
+    logEvent('Manual: ' + dir.replace('_', ' ') + ' held @ PWM ' + pwmSlider.value, 'info');
+
+    heartbeatTimer = setInterval(() => {
+      if (activeDir && state.connected) sendDirection(activeDir);
+      else stopLatch();
+    }, HEARTBEAT_MS);
+  });
+});
+
+pwmSlider.addEventListener('change', () => { if (activeDir) sendDirection(activeDir); });
+
+document.querySelectorAll('.cal-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const target = btn.dataset.cal;
+    stopLatch();
+    const res = await apiCall('/api/calibrate', { target: target });
+    if (res) {
+      el('calResult').textContent = 'Sampling ' + target.replace(/_/g, ' ') + '...';
+      el('calResult').className = 'cal-result';
+      logEvent('Calibration requested: ' + target.replace('_', ' '), 'info');
+    }
+  });
+});
+
+el('estop').addEventListener('click', async () => {
+  stopLatch();
+  const res = await apiCall('/api/estop');
+  if (res) logEvent('EMERGENCY STOP triggered.', 'error');
+});
+</script>
+</body>
+</html>
